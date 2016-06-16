@@ -52,12 +52,7 @@ import org.elasticsearch.hadoop.serialization.dto.mapping.Field;
 import org.elasticsearch.hadoop.serialization.dto.mapping.GeoField;
 import org.elasticsearch.hadoop.serialization.dto.mapping.GeoField.GeoType;
 import org.elasticsearch.hadoop.serialization.dto.mapping.MappingUtils;
-import org.elasticsearch.hadoop.util.Assert;
-import org.elasticsearch.hadoop.util.BytesArray;
-import org.elasticsearch.hadoop.util.BytesRef;
-import org.elasticsearch.hadoop.util.SettingsUtils;
-import org.elasticsearch.hadoop.util.StringUtils;
-import org.elasticsearch.hadoop.util.TrackingBytesArray;
+import org.elasticsearch.hadoop.util.*;
 import org.elasticsearch.hadoop.util.unit.TimeValue;
 
 /**
@@ -141,10 +136,20 @@ public class RestRepository implements Closeable, StatsAware {
      * @return a scroll query
      */
     ScrollQuery scanLimit(String query, BytesArray body, long limit, ScrollReader reader) {
-        String[] scrollInfo = client.scan(query, body);
-        String scrollId = scrollInfo[0];
-        long totalSize = (limit < 1 ? Long.parseLong(scrollInfo[1]) : limit);
-        return new ScrollQuery(this, scrollId, totalSize, reader);
+        // MNUBO : Recuperate the hits if they are present
+        try {
+            Object[] scrollInfo = client.scan(query, body);
+            String scrollId = (String)scrollInfo[0];
+            long totalSize = (limit < 1 ? Long.parseLong((String)scrollInfo[1]) : limit);
+            if(scrollInfo[2] != null){
+                Scroll scroll = reader.read((FastByteArrayInputStream)scrollInfo[2]);
+                return new ScrollQuery(this, scrollId, totalSize, reader, scroll.getHits());
+            } else {
+                return new ScrollQuery(this, scrollId, totalSize, reader, Collections.<Object[]>emptyList());
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void addRuntimeFieldExtractor(MetadataExtractor metaExtractor) {

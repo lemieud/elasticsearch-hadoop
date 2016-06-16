@@ -125,7 +125,7 @@ public class QueryBuilder {
         sb.append("/_search?");
 
         // override infrastructure params
-        uriParams.put("search_type", "scan");
+        //uriParams.put("search_type", "scan"); // MNUBO : Enable sorting
         uriParams.put("scroll", String.valueOf(time.toString()));
         uriParams.put("size", String.valueOf(size));
         if (INCLUDE_VERSION) {

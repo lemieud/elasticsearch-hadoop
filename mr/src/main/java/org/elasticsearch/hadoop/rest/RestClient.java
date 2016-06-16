@@ -32,6 +32,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.map.DeserializationConfig;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -50,6 +52,7 @@ import org.elasticsearch.hadoop.serialization.json.ObjectReader;
 import org.elasticsearch.hadoop.util.ByteSequence;
 import org.elasticsearch.hadoop.util.BytesArray;
 import org.elasticsearch.hadoop.util.IOUtils;
+import org.elasticsearch.hadoop.util.FastByteArrayInputStream;
 import org.elasticsearch.hadoop.util.ObjectUtils;
 import org.elasticsearch.hadoop.util.SettingsUtils;
 import org.elasticsearch.hadoop.util.StringUtils;
@@ -59,7 +62,7 @@ import org.elasticsearch.hadoop.util.unit.TimeValue;
 import static org.elasticsearch.hadoop.rest.Request.Method.*;
 
 public class RestClient implements Closeable, StatsAware {
-
+    private static Log log = LogFactory.getLog(RestClient.class);
     private NetworkClient network;
     private final ObjectMapper mapper;
     private final TimeValue scrollKeepAlive;
@@ -306,7 +309,6 @@ public class RestClient implements Closeable, StatsAware {
         else {
             shardsJson = get(target, "shards");
         }
-
         return shardsJson;
     }
 
@@ -479,13 +481,35 @@ public class RestClient implements Closeable, StatsAware {
         }
     }
 
-    public String[] scan(String query, BytesArray body) {
-        Map<String, Object> scan = parseContent(execute(POST, query, body).body(), null);
+    // MNUBO : Do not throw hits if there are some
+    public Object[] scan(String query, BytesArray body) {
+        try{
+            InputStream initial = execute(POST, query, body).body();
+            BytesArray copyForMeta = IOUtils.asBytes(initial);
+            BytesArray copyForHits = new BytesArray(copyForMeta.available());
+            copyForMeta.copyTo(copyForHits);
 
-        String[] data = new String[2];
-        data[0] = scan.get("_scroll_id").toString();
-        data[1] = ((Map<?, ?>) scan.get("hits")).get("total").toString();
-        return data;
+            InputStream content = new FastByteArrayInputStream(copyForMeta);
+            Map<String, Object> scan = parseContent(content, null);
+
+            Object[] data = new Object[3];
+            data[0] = scan.get("_scroll_id").toString();
+            data[1] = ((Map<?, ?>) scan.get("hits")).get("total").toString();
+
+            int size = ((List)((Map)scan.get("hits")).get("hits")).size();
+
+            if(size > 0) {
+                data[2] = new FastByteArrayInputStream(copyForHits);
+            } else {
+                data[2] = null;
+            }
+            if(log.isTraceEnabled()){
+                log.trace("scan " + query + " " + body + " " + data[0]);
+            }
+            return data;
+        } catch(IOException ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     public InputStream scroll(String scrollId) {

@@ -263,7 +263,7 @@ public class ScrollReader {
 
         // check hits/total
         if (hits() == 0) {
-            return null;
+            return new Scroll(scrollId, Collections.<Object[]>emptyList()); // MNUBO : Fix NPE later down the line
         }
 
         // move to hits/hits

@@ -52,11 +52,13 @@ public class ScrollQuery implements Iterator<Object>, Closeable, StatsAware {
 
     private boolean closed = false;
 
-    ScrollQuery(RestRepository client, String scrollId, long size, ScrollReader reader) {
+    // MNUBO : Added batch parameter
+    ScrollQuery(RestRepository client, String scrollId, long size, ScrollReader reader, List<Object[]> batch) {
         this.repository = client;
         this.scrollId = scrollId;
         this.size = size;
         this.reader = reader;
+        this.batch = batch;
     }
 
     @Override
